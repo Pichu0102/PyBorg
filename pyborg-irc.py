@@ -301,16 +301,13 @@ class ModIRC(SingleServerIRCBot):
 		# We want replies reply_chance%, if speaking is on
 		replyrate = self.settings.speaking * self.settings.reply_chance
 
-		# Always reply to private messages
-		if e.eventtype() == "privmsg":
-			replyrate = 100
-
-		# We want replies reply_chance%, if speaking is on
-		replyrate = self.settings.speaking * self.settings.reply_chance
-
 		# If speaking is on, and a line contains our nickname, have the reply chance here.
 		if body.lower().find(self.settings.myname.lower() ) != -1:
 			replyrate = self.settings.speaking * self.settings.reply_nick
+
+		# Always reply to private messages
+		if e.eventtype() == "privmsg":
+			replyrate = 100
 
 		# Replace nicknames with "#nick", but don't mangle normal body text.
 		if e.eventtype() == "pubmsg":
