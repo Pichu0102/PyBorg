@@ -50,6 +50,14 @@ def get_time():
 	"""
 	return time.strftime("%H:%M:%S", time.localtime(time.time()))
 
+def replace_insensitive(string, target, replacement):
+    no_case = string.lower()
+    index = no_case.find(target.lower())
+    if index >= 0:
+        result = string[:index] + replacement + string[index + len(target):]
+        return result
+    else: # no results so return the original string
+        return string
 
 class ModIRC(SingleServerIRCBot):
 	"""
@@ -68,18 +76,21 @@ class ModIRC(SingleServerIRCBot):
 
 	# Command list for this module
 	commandlist =   "IRC Module Commands:\n!chans, !ignore, \
-!join, !nick, !part, !quit, !quitmsg, !reply2ignored, !replyrate, !replynick, \
-!shutup, !stealth, !unignore, !wakeup, !talk, !me, !owner"
+!join, !rejoin, !nick, !part, !quit, !quitmsg, !reply2ignored, !replyrate, !replynick, \
+!shutup, !stealth, !unignore, !logging, !notify, !wakeup, !talk, !me, !owner"
 	# Detailed command description dictionary
 	commanddict = {
 		"shutup": "Owner command. Usage: !shutup\nStop the bot talking",
 		"wakeup": "Owner command. Usage: !wakeup\nAllow the bot to talk",
 		"join": "Owner command. Usage: !join #chan1 [#chan2 [...]]\nJoin one or more channels",
+		"rejoin": "Owner command. Usage: !rejoin [on|off]\nEnable or disable rejoining a channel after being kicked. Without arguments shows the current setting",
 		"part": "Owner command. Usage: !part #chan1 [#chan2 [...]]\nLeave one or more channels",
 		"chans": "Owner command. Usage: !chans\nList channels currently on",
 		"nick": "Owner command. Usage: !nick nickname\nChange nickname",
 		"ignore": "Owner command. Usage: !ignore [nick1 [nick2 [...]]]\nIgnore one or more nicknames. Without arguments it lists ignored nicknames",
 		"unignore": "Owner command. Usage: !unignore nick1 [nick2 [...]]\nUnignores one or more nicknames",
+		"logging": "Owner command. Usage: !logging [on|off]\nEnables or disables writing to a logfile",
+		"notify": "Owner command. Usage: !notify [on|off]\nEnables or disables private message and CTCP notifications to owners",
 		"replyrate": "Owner command. Usage: !replyrate [rate%]\nSet rate of bot replies to rate%. Without arguments (not an owner-only command) shows the current reply rate",
 		"replynick": "Owner command. Usage: !replynick [ratenick%]\nSet rate of bot replies to nickname to ratenick%. Without arguments (not an owner-only command) shows the current reply on nickname rate",
 		"reply2ignored": "Owner command. Usage: !reply2ignored [on|off]\nAllow/disallow replying to ignored users. Without arguments shows the current setting",
@@ -106,6 +117,10 @@ class ModIRC(SingleServerIRCBot):
 			  "owners": ("Owner(s) nickname", [ "OwnerNick" ]),
 			  "servers": ("IRC Server to connect to (server, port [,password])", [("irc.starchat.net", 6667)]),
 			  "chans": ("Channels to auto-join", ["#test"]),
+			  "rejoin_kick": ("Rejoin channel when kicked out", 0),
+			  "logging": ("Enable or disable writing to a logfile", 0),
+			  "notify" : ("Enable or disable private message and CTCP notifications to owners", 1),
+			  "logfile": ("If logging is enabled, name of logfile", "log.txt"),
 			  "speaking": ("Allow the bot to talk on channels", 1),
 			  "stealth": ("Hide the fact we are a bot", 0),
 			  "ignorelist": ("Ignore these nicknames:", []),
@@ -188,7 +203,11 @@ class ModIRC(SingleServerIRCBot):
 			reason = ""
 
 		if kicked == self.settings.myname:
-			print "[%s] <--  %s was kicked off %s by %s (%s)" % (get_time(), kicked, target, kicker, reason)
+			if self.settings.rejoin_kick:
+				print "[%s] <--  %s was kicked off %s by %s (%s) (REJOINING)" % (get_time(), kicked, target, kicker, reason)
+				c.join(target)
+			else:
+				print "[%s] <--  %s was kicked off %s by %s (%s)" % (get_time(), kicked, target, kicker, reason)
 
 	def on_privmsg(self, c, e):
 		self.on_msg(c, e)
@@ -238,32 +257,84 @@ class ModIRC(SingleServerIRCBot):
 				# Ignore all the other CTCPs
 				return
 
-		for irc_color_char in [',', "\x03"]:
-			debut = body.rfind(irc_color_char)
-			if 0 <= debut < 5:
-				x = 0
-				for x in xrange(debut+1, len(body)):
-					if body[x].isdigit() == 0:
+		color_char = 0 #Remove IRC color strings
+		while "\x03" in body:
+			color_char = body.rfind("\x03")
+			x = 0
+			i = 0
+			if color_char + 5 < len(body):
+				while i < 5:
+					if body[color_char+1].isdigit() or body[color_char+1] == ',':
+						body = body[:color_char+1] + body[color_char+2:]
+					else:
+						body = body[:color_char] + body[color_char+1:]
 						break
-				body = body[x:]
+					i += 1
+			elif color_char + 1 < len(body):
+				j = color_char+1
+				while j < len(body):
+					if body[color_char+1].isdigit() or body[color_char+1] == ',':
+						body = body[:color_char+1] + body[color_char+2:]
+					else:
+						body = body[:color_char] + body[color_char+1:]
+						break
+					j += 1
+			else:
+				body = body[:color_char] + body[color_char+1:]
 
 		#remove special irc fonts chars
-		body = body[body.rfind("\x02")+1:]
-		body = body[body.rfind("\xa0")+1:]
-
-		# WHOOHOOO!!
-		if target == self.settings.myname or source == self.settings.myname:
-			print "[%s] <%s> > %s> %s" % ( get_time(), source, target, body)
+		body = body.replace("\x02", "")
+		body = body.replace("\x1F", "")
+		body = body.replace("\x16", "")
+		body = body.replace("\x0F", "")
+		body = body.replace("\xa0", "")
 
 		# Ignore self.
 		if source == self.settings.myname: return
 
 
-		#replace nicknames by "#nick"
+		# Completely ignore lines beginning with ``
+		if body.startswith("``"):
+			print "Line ignored"
+			return
+
+		# We want replies reply_chance%, if speaking is on
+		replyrate = self.settings.speaking * self.settings.reply_chance
+
+		# Always reply to private messages
+		if e.eventtype() == "privmsg":
+			replyrate = 100
+
+		# We want replies reply_chance%, if speaking is on
+		replyrate = self.settings.speaking * self.settings.reply_chance
+
+		# If speaking is on, and a line contains our nickname, have the reply chance here.
+		if body.lower().find(self.settings.myname.lower() ) != -1:
+			replyrate = self.settings.speaking * self.settings.reply_nick
+
+		# Replace nicknames with "#nick", but don't mangle normal body text.
 		if e.eventtype() == "pubmsg":
 			for x in self.channels[target].users():
-				body = body.replace(x, "#nick")
-		print body
+				if len(x) > 2: # Don't bother with tiny words
+					if x.startswith(('&', '@', '%', '+', '~')): # Strip usermode symbols
+						x = x[1:]
+					body = replace_insensitive(body, ' ' + x + ' ', ' #nick ')
+					tupunc = 0
+					while tupunc < len(string.punctuation):
+						puncind = tuple(string.punctuation)[tupunc]
+						body = replace_insensitive(body, ' ' + x + puncind, ' #nick' + puncind)
+						body = replace_insensitive(body, puncind + x + ' ', puncind + '#nick ')
+						if body.lower().startswith(x.lower() + puncind):
+							body = '#nick' + puncind + body[len(x)+1:]
+						tupunc += 1
+					if body.lower() == x.lower():
+						body = '#nick'
+					if body.lower().startswith(x.lower() + ' '):
+						body = '#nick ' + body[len(x)+1:]
+					if body.lower().endswith(' ' + x.lower()):
+						body = body[:(len(body))-(len(x)+1)] + ' #nick'
+
+		print "[%s] <%s> > %s> %s" % ( get_time(), source, target, body)
 
 		# Ignore selected nicks
 		if self.settings.ignorelist.count(source.lower()) > 0 \
@@ -282,27 +353,19 @@ class ModIRC(SingleServerIRCBot):
 		if body == "":
 			return
 
+		# If logging is on, write body to logfile
+		if self.settings.logging:
+			loghandle = open(self.settings.logfile, 'a')
+			loghandle.write("[%s] <%s> > %s> %s\n" % ( get_time(), source, target, body))
+
 		# Ignore quoted messages
 		if body[0] == "<" or body[0:1] == "\"" or body[0:1] == " <":
 			print "Ignoring quoted text"
 			return
 
-		# We want replies reply_chance%, if speaking is on
-		replyrate = self.settings.speaking * self.settings.reply_chance
-
-		# If speaking is on, and a line contains our nickname, have the reply chance here.
-		# This probably breaks everything.
-		if body.lower().find(self.settings.myname.lower() ) != -1:
-			replyrate = self.settings.speaking * self.settings.reply_nick
-
-		# Always reply to private messages
-		if e.eventtype() == "privmsg":
-			replyrate = 100
-
-			# Parse ModIRC commands
-			if body[0] == "!":
-				if self.irc_commands(body, source, target, c, e) == 1:return
-
+		# Parse ModIRC commands
+		if body[0] == "!":
+			if self.irc_commands(body, source, target, c, e) == 1:return
 
 		# Pass message onto pyborg
 		if source in self.owners and e.source() in self.owner_mask:
@@ -363,6 +426,57 @@ class ModIRC(SingleServerIRCBot):
 						msg = msg + "off"
 						self.settings.stealth = 0
 
+			# Enable/disable logging
+			elif command_list[0] == "!logging":
+				msg = "Logging "
+				if len(command_list) == 1:
+					if self.settings.logging == 0:
+						msg = msg + "off"
+					else:
+						msg = msg + "on"
+				else:
+					toggle = command_list[1].lower()
+					if toggle == "on":
+						msg = msg + "on"
+						self.settings.logging = 1
+					else:
+						msg = msg + "off"
+						self.settings.logging = 0
+
+			# Enable/disable notifications
+			elif command_list[0] == "!notify":
+				msg = "Notifications "
+				if len(command_list) == 1:
+					if self.settings.notify == 0:
+						msg = msg + "off"
+					else:
+						msg = msg + "on"
+				else:
+					toggle = command_list[1].lower()
+					if toggle == "on":
+						msg = msg + "on"
+						self.settings.notify = 1
+					else:
+						msg = msg + "off"
+						self.settings.notify = 0
+
+			# Enable/disable rejoin on kick
+			elif command_list[0] == "!rejoin":
+				msg = "Rejoin setting "
+				if len(command_list) == 1:
+					if self.settings.rejoin_kick == 0:
+						msg = msg + "off"
+					else:
+						msg = msg + "on"
+				else:
+					toggle = command_list[1].lower()
+					if toggle == "on":
+						msg = msg + "on"
+						self.settings.rejoin_kick = 1
+					else:
+						msg = msg + "off"
+						self.settings.rejoin_kick = 0
+
 			# filter mirc colours out?
 			elif command_list[0] == "!nocolor" or command_list[0] == "!nocolour":
 				msg = "obsolete command "
@@ -387,17 +501,17 @@ class ModIRC(SingleServerIRCBot):
 			# Stop talking
 			elif command_list[0] == "!shutup":
 				if self.settings.speaking == 1:
-					msg = "I'll be quiet :-("
+					msg = "I'll be quiet :("
 					self.settings.speaking = 0
 				else:
-					msg = ":-x"
+					msg = ":x"
 			# Wake up again
 			elif command_list[0] == "!wakeup":
 				if self.settings.speaking == 0:
 					self.settings.speaking = 1
 					msg = "Whoohoo!"
 				else:
-					msg = "But i'm already awake..."
+					msg = "But I'm already awake..."
 						
 			# Join a channel or list of channels
 			elif command_list[0] == "!join":
@@ -464,8 +578,11 @@ class ModIRC(SingleServerIRCBot):
 			# Change reply rate
 			elif command_list[0] == "!replyrate":
 				try:
-					self.settings.reply_chance = int(command_list[1])
-					msg = "Now replying to %d%% of messages." % int(command_list[1])
+					if int(command_list[1]) > 100:
+						self.settings.reply_chance = 100
+					else:
+						self.settings.reply_chance = int(command_list[1])
+					msg = "Now replying to %d%% of messages." % self.settings.reply_chance
 				except:
 					msg = "Reply rate is %d%%." % self.settings.reply_chance
 			# Change reply to nickname rate
@@ -504,7 +621,7 @@ class ModIRC(SingleServerIRCBot):
 		Output a line of text. args = (body, source, target, c, e)
 		"""
 		if not self.connection.is_connected():
-			print "Can't send reply : not connected to server"
+			print "Can't send reply: not connected to server"
 			return
 
 		# Unwrap arguments
@@ -536,16 +653,18 @@ class ModIRC(SingleServerIRCBot):
 				c.privmsg(source, message)
 				# send copy to owner
 				if not source in self.owners:
-					c.privmsg(','.join(self.owners), "(From "+source+") "+body)
-					c.privmsg(','.join(self.owners), "(To   "+source+") "+message)
+					if self.settings.notify:
+						c.privmsg(','.join(self.owners), "(From "+source+") "+body)
+						c.privmsg(','.join(self.owners), "(To   "+source+") "+message)
 			# ctcp action priv msg
 			else:
 				print "[%s] <%s> > %s> /me %s" % ( get_time(), self.settings.myname, target, message)
 				c.action(source, message)
 				# send copy to owner
 				if not source in self.owners:
-					map ( ( lambda x: c.action(x, "(From "+source+") "+body) ), self.owners)
-					map ( ( lambda x: c.action(x, "(To   "+source+") "+message) ), self.owners)
+					if self.settings.notify:
+						map ( ( lambda x: c.action(x, "(From "+source+") "+body) ), self.owners)
+						map ( ( lambda x: c.action(x, "(To   "+source+") "+message) ), self.owners)
 
 if __name__ == "__main__":
 	
