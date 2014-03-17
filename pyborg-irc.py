@@ -336,13 +336,6 @@ class ModIRC(SingleServerIRCBot):
 		if command_list[0] == "!replynick" and len(command_list)==1:
 			msg = "Reply to nickname rate is "+`self.settings.reply_nick`+"%."
 
-		if command_list[0] == "!owner" and len(command_list) > 1 and source not in self.owners:
-			if command_list[1] == self.settings.password:
-				self.owners.append(source)
-				self.output("You've been added to owners list", ("", source, target, c, e))
-			else:
-				self.output("Try again", ("", source, target, c, e))
-
 		### Owner commands
 		if source in self.owners and e.source() in self.owner_mask:
 
