@@ -68,8 +68,8 @@ class ModIRC(SingleServerIRCBot):
 
 	# Command list for this module
 	commandlist =   "IRC Module Commands:\n!chans, !ignore, \
-!join, !nick, !part, !quit, !quitmsg, !reply2ignored, !replyrate, !shutup, \
-!stealth, !unignore, !wakeup, !talk, !me, !owner"
+!join, !nick, !part, !quit, !quitmsg, !reply2ignored, !replyrate, !replynick, \
+!shutup, !stealth, !unignore, !wakeup, !talk, !me, !owner"
 	# Detailed command description dictionary
 	commanddict = {
 		"shutup": "Owner command. Usage: !shutup\nStop the bot talking",
@@ -81,6 +81,7 @@ class ModIRC(SingleServerIRCBot):
 		"ignore": "Owner command. Usage: !ignore [nick1 [nick2 [...]]]\nIgnore one or more nicknames. Without arguments it lists ignored nicknames",
 		"unignore": "Owner command. Usage: !unignore nick1 [nick2 [...]]\nUnignores one or more nicknames",
 		"replyrate": "Owner command. Usage: !replyrate [rate%]\nSet rate of bot replies to rate%. Without arguments (not an owner-only command) shows the current reply rate",
+		"replynick": "Owner command. Usage: !replynick [ratenick%]\nSet rate of bot replies to nickname to ratenick%. Without arguments (not an owner-only command) shows the current reply on nickname rate",
 		"reply2ignored": "Owner command. Usage: !reply2ignored [on|off]\nAllow/disallow replying to ignored users. Without arguments shows the current setting",
 		"stealth": "Owner command. Usage: !stealth [on|off]\nTurn stealth mode on or off (disable non-owner commands and don't return CTCP VERSION). Without arguments shows the current setting",
 		"quitmsg": "Owner command. Usage: !quitmsg [message]\nSet the quit message. Without arguments show the current quit message",
@@ -110,6 +111,7 @@ class ModIRC(SingleServerIRCBot):
 			  "ignorelist": ("Ignore these nicknames:", []),
 			  "reply2ignored": ("Reply to ignored people", 0),
 			  "reply_chance": ("Chance of reply (%) per message", 33),
+			  "reply_nick": ("Chance of replying to lines containing our nickname (%)", 33),
 			  "quitmsg": ("IRC quit message", "Bye :-("),
 			  "password": ("password for control the bot (Edit manually !)", "")
 			} )
@@ -288,9 +290,10 @@ class ModIRC(SingleServerIRCBot):
 		# We want replies reply_chance%, if speaking is on
 		replyrate = self.settings.speaking * self.settings.reply_chance
 
-		# double reply chance if the text contains our nickname :-)
+		# If speaking is on, and a line contains our nickname, have the reply chance here.
+		# This probably breaks everything.
 		if body.lower().find(self.settings.myname.lower() ) != -1:
-			replyrate = replyrate * 2
+			replyrate = self.settings.speaking * self.settings.reply_nick
 
 		# Always reply to private messages
 		if e.eventtype() == "privmsg":
@@ -328,6 +331,10 @@ class ModIRC(SingleServerIRCBot):
 				self.output("You've been added to owners list", ("", source, target, c, e))
 			else:
 				self.output("Try again", ("", source, target, c, e))
+				
+		#Query replynick
+		if command_list[0] == "!replynick" and len(command_list)==1:
+			msg = "Reply to nickname rate is "+`self.settings.reply_nick`+"%."
 
 		### Owner commands
 		if source in self.owners and e.source() in self.owner_mask:
@@ -461,6 +468,13 @@ class ModIRC(SingleServerIRCBot):
 					msg = "Now replying to %d%% of messages." % int(command_list[1])
 				except:
 					msg = "Reply rate is %d%%." % self.settings.reply_chance
+			# Change reply to nickname rate
+			elif command_list[0] == "!replynick":
+				try:
+					self.settings.reply_nick = int(command_list[1])
+					msg = "Now replying to %d%% of messages with my nickname." % int(command_list[1])
+				except:
+					msg = "Reply rate to my nickname is %d%%." % self.settings.reply_nick
 			#make the bot talk
 			elif command_list[0] == "!talk":
 				if len(command_list) >= 2:
