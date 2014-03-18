@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+﻿#! /usr/bin/env python
 #
 # PyBorg IRC module
 #
@@ -76,8 +76,9 @@ class ModIRC(SingleServerIRCBot):
 
 	# Command list for this module
 	commandlist =   "IRC Module Commands:\n!chans, !ignore, \
-!join, !rejoin, !nick, !part, !quit, !quitmsg, !reply2ignored, !replyrate, !replynick, \
-!shutup, !stealth, !unignore, !logging, !notify, !wakeup, !talk, !me, !owner"
+!join, !rejoin, !nick, !part, !quit, !quitmsg, !reply2ignored, !replyrate, !replymagic \
+!replynick, !shutup, !stealth, !unignore, !logging, !notify, !wakeup, !talk, \
+!me, !owner" \
 	# Detailed command description dictionary
 	commanddict = {
 		"shutup": "Owner command. Usage: !shutup\nStop the bot talking",
@@ -92,6 +93,7 @@ class ModIRC(SingleServerIRCBot):
 		"logging": "Owner command. Usage: !logging [on|off]\nEnables or disables writing to a logfile",
 		"notify": "Owner command. Usage: !notify [on|off]\nEnables or disables private message and CTCP notifications to owners",
 		"replyrate": "Owner command. Usage: !replyrate [rate%]\nSet rate of bot replies to rate%. Without arguments (not an owner-only command) shows the current reply rate",
+		"replymagic": "Owner command. Usage: !replymagic [ratemagic%]\nSet rate of bot replies to mage words to ratemagic%. Without arguments (not an owner-only command) shows the current reply on magic words rate",
 		"replynick": "Owner command. Usage: !replynick [ratenick%]\nSet rate of bot replies to nickname to ratenick%. Without arguments (not an owner-only command) shows the current reply on nickname rate",
 		"reply2ignored": "Owner command. Usage: !reply2ignored [on|off]\nAllow/disallow replying to ignored users. Without arguments shows the current setting",
 		"stealth": "Owner command. Usage: !stealth [on|off]\nTurn stealth mode on or off (disable non-owner commands and don't return CTCP VERSION). Without arguments shows the current setting",
@@ -126,7 +128,9 @@ class ModIRC(SingleServerIRCBot):
 			  "ignorelist": ("Ignore these nicknames:", []),
 			  "reply2ignored": ("Reply to ignored people", 0),
 			  "reply_chance": ("Chance of reply (%) per message", 33),
+			  "reply_magic": ("Chance of replying to lines containg magic words (%)", 33),
 			  "reply_nick": ("Chance of replying to lines containing our nickname (%)", 33),
+			  "magicwords": ("Reply to these magic words with the chance defined in reply_magic, in the format of ['Word1', 'Word2']", []),
 			  "quitmsg": ("IRC quit message", "Bye :-("),
 			  "password": ("password for control the bot (Edit manually !)", "")
 			} )
@@ -301,6 +305,10 @@ class ModIRC(SingleServerIRCBot):
 		# We want replies reply_chance%, if speaking is on
 		replyrate = self.settings.speaking * self.settings.reply_chance
 
+		# If speaking is on, and a line contains a magic word, have the reply chance here.
+		if self.settings.magicwords.count(body.lower()) != -1:
+			replyrate = self.settings.speaking * self.settings.reply_magic
+		
 		# If speaking is on, and a line contains our nickname, have the reply chance here.
 		if body.lower().find(self.settings.myname.lower() ) != -1:
 			replyrate = self.settings.speaking * self.settings.reply_nick
@@ -582,6 +590,13 @@ class ModIRC(SingleServerIRCBot):
 					msg = "Now replying to %d%% of messages." % self.settings.reply_chance
 				except:
 					msg = "Reply rate is %d%%." % self.settings.reply_chance
+			# Change reply to magic rate
+			elif command_list[0] == "!replymagic":
+				try:
+					self.settings.reply_magic = int(command_list[1])
+					msg = "Now replying to %d%% of messages with magic words." % int(command_list[1])
+				except:
+					msg = "Reply rate to magic words is %d%%." % self.settings.reply_magic
 			# Change reply to nickname rate
 			elif command_list[0] == "!replynick":
 				try:

@@ -76,6 +76,8 @@ The following orders are available only on IRC:
        on the channel
     * !replynick: probability that the bot answers a message with
       their nickname in it on the channel
+	* !replymagic: probability that the bot answers a message with
+	  one of the magic words in their magic word list
     * !talk [nick] [message]: send the message [message] with [nick] on behalf
        of the bot
 
@@ -121,8 +123,12 @@ pyborg-irc.cfg:
       on the channel. Can be changed with the order! replyrate (see the order!
       replyrate)
     * reply_nick: percentage of chance that the bot answers a message containing its nickname.
-    Can be changed with the order! replynick (see the order!
+      Can be changed with the order! replynick (see the order!
       replynick
+	* reply_magic: percentage chance that the bot answers a message containing
+	  a magic word from its magic word list. Can be changed or viewed with the order !replymagic.
+	* magicwords: List of magic words that the bot should respond to. Should be in the format of
+	  ['Word1', Word2'].
     * reply_to_ignored: 0 or 1 make it possible to answer or not the people who
       in the list of are ignored
     * chans: a list channels one where the bot must be connected (is not
