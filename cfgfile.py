@@ -42,16 +42,25 @@ def _load_config(filename):
 			continue
 			
 		#read if the string is above multiple lines
-		while s.rfind("\\") > -1:
-			s = s[:s.rfind("\\")] + f.readline()
+		while s.find("#") == -1:
+			lecture = f.readline()
+			if lecture == "":
+				break
+
+			#Convert old configuration system ( with \ at the end of line )
+			if s[-2] == '\\':
+				s = s[:-2]
+
+			s = s[:s.rfind("\n")] + lecture
 			line = line + 1
 
 		s = string.split(s, "=")
-		if len(s) != 2:
+		try:
+			stuff[string.strip(s[0])] = eval(string.strip(string.join(s[1:], "=")))
+		except:
 			print "Malformed line in %s line %d" % (filename, line)
-			print s
+			print "\t%s" %s
 			continue
-		stuff[string.strip(s[0])] = eval(string.strip(string.join(s[1:], "=")))
 	return stuff
 		
 def _save_config(filename, fields):
@@ -63,18 +72,34 @@ def _save_config(filename, fields):
 
 	# write the values with comments. this is a silly comment
 	for key in fields.keys():
-		f.write("# "+fields[key][0]+"\n")
+		f.write("# "+fields[key][0]+" #\n")
 		s = repr(fields[key][1])
 		f.write(key+"\t= ")
+
+		#Create a new line after each dic entry
+		if s.find("],") != -1:
+			cut_string = ""
+			while s.find("],") != -1:
+				position = s.find("],")+3
+				#cut_string = cut_string + s[:position] + "\\\n\t"
+				cut_string = cut_string + s[:position] + "\n\t"
+				s = s[position:]
+			s = cut_string + s
+			f.write(s+"\n")
+			continue
+
+		#If the line exceed a normal display ( 80 col ) cut it
 		if len(s) > 80:
 			cut_string = ""
 			while len(s) > 80:
 				position = s.rfind(",",0,80)+1
-				cut_string = cut_string + s[:position] + "\\\n\t\t"
+				#cut_string = cut_string + s[:position] + "\\\n\t\t"
+				cut_string = cut_string + s[:position] + "\n\t\t"
 				s = s[position:]
 			s = cut_string + s
 		f.write(s+"\n")
 
+	#f.write("# End of configuration #")
 	f.close()
 
 
