@@ -306,7 +306,7 @@ class ModIRC(SingleServerIRCBot):
 		replyrate = self.settings.speaking * self.settings.reply_chance
 
 		# If speaking is on, and a line contains a magic word, have the reply chance here.
-		if self.settings.magicwords.count(body.lower()) != -1:
+		if any(magic_word in body.lower() for magic_word in self.settings.magicwords):
 			replyrate = self.settings.speaking * self.settings.reply_magic
 		
 		# If speaking is on, and a line contains our nickname, have the reply chance here.
